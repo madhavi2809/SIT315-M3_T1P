@@ -33,7 +33,16 @@ int main() {
         return 1;
     }
 
-    // Initialize OpenCL
+    // Load OpenCL kernel code from file
+    ifstream kernelFile("matrix_multiplication.cl");
+    if (!kernelFile.is_open()) {
+        cerr << "Failed to open kernel file." << endl;
+        return 1;
+    }
+    string kernelCode((istreambuf_iterator<char>(kernelFile)), istreambuf_iterator<char>());
+    kernelFile.close();
+
+    // Get available OpenCL platforms
     vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);
     if (platforms.empty()) {
@@ -41,7 +50,10 @@ int main() {
         return 1;
     }
 
+    // Use the first available platform
     cl::Platform platform = platforms.front();
+
+    // Get available OpenCL devices
     vector<cl::Device> devices;
     platform.getDevices(CL_DEVICE_TYPE_GPU, &devices);
     if (devices.empty()) {
@@ -49,21 +61,18 @@ int main() {
         return 1;
     }
 
+    // Use the first available device
     cl::Device device = devices.front();
+
+    // Create an OpenCL context and command queue
     cl::Context context(device);
     cl::CommandQueue queue(context, device);
 
-    // Load and compile OpenCL kernel code
-    ifstream file("matrix_multiplication.cl");
-    if (!file.is_open()) {
-        cerr << "Failed to open kernel file." << endl;
-        return 1;
-    }
-    string sourceCode(istreambuf_iterator<char>(file), (istreambuf_iterator<char>()));
-    cl::Program::Sources sources(1, make_pair(sourceCode.c_str(), sourceCode.length() + 1));
+    // Compile the kernel code
+    cl::Program::Sources sources(1, make_pair(kernelCode.c_str(), kernelCode.length()));
     cl::Program program(context, sources);
     if (program.build({device}) != CL_SUCCESS) {
-        cerr << "Failed to compile kernel." << endl;
+        cerr << "Failed to build kernel." << endl;
         return 1;
     }
 
@@ -77,7 +86,7 @@ int main() {
     cl::Buffer bufferB(context, CL_MEM_READ_ONLY | CL_MEM_COPY_HOST_PTR, sizeof(int) * N * N, B);
     cl::Buffer bufferC(context, CL_MEM_WRITE_ONLY, sizeof(int) * N * N);
 
-    // Create kernel and set arguments
+    // Create kernel object and set arguments
     cl::Kernel kernel(program, "matrixMultiplication");
     kernel.setArg(0, bufferA);
     kernel.setArg(1, bufferB);
@@ -90,4 +99,22 @@ int main() {
 
     // Read result back to host memory
     int C[MAX_SIZE][MAX_SIZE];
-    queue.enqueueReadBuffer(bufferC, CL_TRUE, 0, sizeof(int
+    queue.enqueueReadBuffer(bufferC, CL_TRUE, 0, sizeof(int) * N * N, C);
+
+    // Output results
+    ofstream outputFile("output.txt");
+    if (outputFile.is_open()) {
+        for (int i = 0; i < N; ++i) {
+            for (int j = 0; j < N; ++j) {
+                outputFile << C[i][j] << " ";
+            }
+            outputFile << endl;
+        }
+        outputFile.close();
+        cout << "Output written to output.txt" << endl;
+    } else {
+        cerr << "Unable to open file for writing." << endl;
+    }
+
+    return 0;
+}
